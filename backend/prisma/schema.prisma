@@ -1,0 +1,124 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+//
+// ENUMS
+//
+
+enum ResourceType {
+  FILE
+  FOLDER
+}
+
+enum ShareRole {
+  VIEWER
+  EDITOR
+}
+
+//
+// USER
+//
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  password   String
+  name       String?
+  createdAt  DateTime    @default(now())
+
+  folders    Folder[]
+  files      File[]
+  shares     Share[]       // shares where user is grantee
+  linkShares LinkShare[]   // links created by this user
+}
+
+//
+// FOLDER
+//
+
+model Folder {
+  id        String    @id @default(uuid())
+  name      String
+  ownerId   String
+  parentId  String?
+  isDeleted Boolean   @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  parent    Folder?   @relation("FolderToFolder", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]  @relation("FolderToFolder")
+
+  files     File[]
+
+  @@unique([ownerId, parentId, name])
+}
+
+//
+// FILE
+//
+
+model File {
+  id        String   @id @default(uuid())
+  name      String
+  mimeType  String
+  size      Int
+  path      String
+  ownerId   String
+  folderId  String?
+  isDeleted Boolean  @default(false)
+
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([folderId])
+}
+
+//
+// USER-TO-USER SHARE
+//
+
+model Share {
+  id            String       @id @default(uuid())
+  resourceType  ResourceType
+  resourceId    String
+  granteeId     String
+  role          ShareRole
+  createdAt     DateTime     @default(now())
+
+  grantee       User         @relation(fields: [granteeId], references: [id], onDelete: Cascade)
+
+  @@index([resourceType, resourceId])
+  @@unique([resourceType, resourceId, granteeId])
+}
+
+//
+// PUBLIC LINK SHARE
+//
+
+model LinkShare {
+  id           String       @id @default(uuid())
+  resourceType ResourceType
+  resourceId   String
+  token        String       @unique
+  expiresAt    DateTime?
+  password     String?
+  createdAt    DateTime     @default(now())
+
+  createdById  String
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([resourceType, resourceId])
+}
